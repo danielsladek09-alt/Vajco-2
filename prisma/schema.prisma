@@ -1,0 +1,65 @@
+// VAJCO — databázové schéma pro rezervační systém.
+//
+// LOKÁLNÍ VÝVOJ: provider je "sqlite", DATABASE_URL ukazuje na lokální
+// soubor (viz .env.example) — appka jde spustit bez jakýchkoliv
+// externích credentials.
+//
+// PRODUKCE / SUPABASE: až budeme mít Supabase (nebo jiný Postgres)
+// projekt, stačí:
+//   1. přepsat `provider = "sqlite"` na `provider = "postgresql"` níže
+//   2. nastavit DATABASE_URL v .env na connection string ze Supabase
+//   3. spustit `npx prisma migrate deploy`
+// Model rezervace zůstává stejný, nic dalšího se měnit nemusí.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ReservationStatus {
+  NEW // Nová
+  CONFIRMED // Potvrzená
+  PICKED_UP // Vyzvednuto
+  CANCELLED // Zrušená
+}
+
+enum ProductType {
+  CARTON_12
+  CARTON_30
+}
+
+model Reservation {
+  id String @id @default(cuid())
+
+  // Kontaktní údaje
+  name  String
+  phone String
+  email String
+
+  // Co si zákazník rezervuje
+  product     ProductType
+  cartonCount Int
+  eggCount    Int
+
+  // Kdy si to vyzvedne — ukládáno jako lokální datum/čas (Europe/Prague)
+  // ve formátu "YYYY-MM-DD" a "HH:mm", aby se předešlo komplikacím
+  // s časovými pásmy při jednoduchém párování na sloty.
+  pickupDate String
+  pickupTime String
+
+  note String?
+
+  status ReservationStatus @default(NEW)
+
+  consentAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pickupDate])
+  @@index([status])
+}

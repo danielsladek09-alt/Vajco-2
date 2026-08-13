@@ -1,72 +1,118 @@
-import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
-import Navbar from './Navbar'
-import WordsPullUp from './WordsPullUp'
+"use client";
 
-const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
+import { motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import { PhotoPlaceholder } from "./PhotoPlaceholder";
 
-const HERO_VIDEO_URL =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260405_170732_8a9ccda6-5cff-4628-b164-059c500a2b41.mp4'
-
-export default function Hero() {
+/**
+ * Zvažované varianty headline (zadání #10):
+ *   - "Vejce, co mají příběh."
+ *   - "Čerstvé vejce. Přímo od nás."
+ *   - "Od slepice až k tobě."   ← vybráno, viz níže
+ *
+ * "Od slepice až k tobě." vyhrálo, protože v pěti slovech popisuje
+ * celou cestu (farma → rezervace → vyzvednutí), zní lidsky a hraje si
+ * s pohybem v hero grafice.
+ */
+export function Hero() {
   return (
-    <section className="h-screen w-full p-4 md:p-6">
-      <div className="relative h-full w-full rounded-2xl md:rounded-[2rem] overflow-hidden">
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          src={HERO_VIDEO_URL}
-          autoPlay
-          loop
-          muted
-          playsInline
-        />
+    <section id="hero" className="relative overflow-hidden pt-8 pb-20 sm:pt-14 sm:pb-28">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-grass-light/40 blur-3xl" />
+      <div className="pointer-events-none absolute -left-32 top-1/2 h-96 w-96 rounded-full bg-cream-dark/60 blur-3xl" />
 
-        <div className="noise-overlay absolute inset-0 opacity-[0.7] mix-blend-overlay pointer-events-none" />
+      <div className="relative mx-auto grid max-w-6xl gap-12 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-8">
+        <div>
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-5 inline-flex items-center gap-2 rounded-full bg-forest/5 px-4 py-1.5 text-xs font-semibold tracking-wide text-forest/70"
+          >
+            Farma u Klentnice · Pálava
+          </motion.p>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="font-display text-[13vw] leading-[0.95] tracking-tight text-forest sm:text-6xl lg:text-7xl"
+          >
+            Od slepice
+            <br />
+            až k tobě.
+          </motion.h1>
 
-        <Navbar />
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            className="mt-6 max-w-md text-base text-forest/70 sm:text-lg"
+          >
+            Čerstvá vejce z vlastního chovu u Pálavy. Vyber si karton, zarezervuj
+            čas a vyzvedni si je v Brně-Komíně. Platíš až na místě.
+          </motion.p>
 
-        <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 md:p-10">
-          <div className="grid grid-cols-12 gap-4 md:gap-6 items-end">
-            <div className="col-span-12 md:col-span-8" style={{ color: '#E1E0CC' }}>
-              <WordsPullUp
-                text="Prisma"
-                showAsterisk
-                className="font-medium leading-[0.85] tracking-[-0.07em] text-[26vw] sm:text-[24vw] md:text-[22vw] lg:text-[20vw] xl:text-[19vw] 2xl:text-[20vw]"
-                delayOffset={0.2}
-              />
-            </div>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mt-8 flex flex-wrap items-center gap-4"
+          >
+            <a
+              href="#rezervace"
+              className="group inline-flex items-center gap-2 rounded-full bg-forest px-6 py-3.5 text-sm font-semibold text-cream transition-transform hover:scale-[1.03] sm:text-base"
+            >
+              Rezervovat vejce
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </a>
+            <a
+              href="#o-nas"
+              className="inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold text-forest underline decoration-forest/30 underline-offset-4 transition-colors hover:decoration-forest sm:text-base"
+            >
+              Poznat VAJCO
+            </a>
+          </motion.div>
+        </div>
 
-            <div className="col-span-12 md:col-span-4 flex flex-col gap-4 md:gap-6 pb-2 md:pb-3">
-              <motion.p
-                className="text-primary/70 text-xs sm:text-sm md:text-base"
-                style={{ lineHeight: 1.2 }}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.7, delay: 0.5, ease: EASE }}
-              >
-                Prisma is a worldwide network of visual artists, filmmakers and storytellers
-                bound not by place, status or labels but by passion and hunger to unlock
-                potential through our unique perspectives.
-              </motion.p>
-
-              <motion.a
-                href="#"
-                className="group inline-flex w-fit items-center gap-2 hover:gap-3 transition-all duration-300 bg-primary rounded-full pl-5 pr-1.5 py-1.5 sm:pl-6 sm:pr-2 sm:py-2"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.7, delay: 0.7, ease: EASE }}
-              >
-                <span className="text-black font-medium text-sm sm:text-base">Join the lab</span>
-                <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-black transition-transform duration-300 group-hover:scale-110">
-                  <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#E1E0CC' }} />
-                </span>
-              </motion.a>
-            </div>
-          </div>
+        <div className="relative grid grid-cols-2 gap-4 sm:gap-5">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3 }}
+            className="col-span-2"
+          >
+            <PhotoPlaceholder
+              caption="Fotka: slepice ve volném výběhu na farmě v Klentnici"
+              tone="grass"
+              className="aspect-[4/3]"
+            />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.45 }}
+            whileHover={{ y: -4 }}
+          >
+            <PhotoPlaceholder
+              caption="Fotka: čerstvá vejce v ruce"
+              tone="cream"
+              className="aspect-square"
+            />
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.55 }}
+            whileHover={{ y: -4 }}
+          >
+            <PhotoPlaceholder
+              caption="Fotka: karton vajec v trávě"
+              tone="forest"
+              className="aspect-square"
+            />
+          </motion.div>
         </div>
       </div>
     </section>
-  )
+  );
 }

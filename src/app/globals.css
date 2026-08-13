@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/**
+ * VAJCO — vizuální systém.
+ * Barvy, fonty a pár sdílených utilit na jednom místě.
+ */
+@theme inline {
+  --color-forest: #243b2b;
+  --color-forest-light: #35543e;
+  --color-grass: #8caa6e;
+  --color-grass-light: #b7cc9d;
+  --color-cream: #f7efdd;
+  --color-cream-dark: #efe2c4;
+  --color-white: #ffffff;
+  --color-brown: #a2794f;
+  --color-ink: #16150f;
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Jemný zrnitý (grain/noise) povrch — používá se decentně přes tmavší
+   sekce, aby nepůsobily jako ploché digitální gradienty. */
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
