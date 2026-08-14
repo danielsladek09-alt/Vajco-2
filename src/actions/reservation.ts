@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { Prisma, type Reservation } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reservationSchema } from "@/lib/validation";
 import { checkSlotCapacity } from "@/lib/slots";
@@ -28,6 +29,74 @@ const PRODUCT_TO_ID: Record<string, ProductId> = {
   CARTON_12: "carton-12",
   CARTON_30: "carton-30",
 };
+
+// Sériové (Serializable) transakce podporuje Prisma jen pro Postgres —
+// pro SQLite se volba prostě vynechá (SQLite beztak zamyká celý soubor
+// při zápisu, takže dvě souběžné transakce se v praxi neprolnou).
+const isPostgres = (process.env.DATABASE_URL ?? "").startsWith("postgres");
+const MAX_ATTEMPTS = 3;
+
+class SlotCapacityError extends Error {}
+
+/**
+ * Vytvoří rezervaci uvnitř DB transakce, kde se kapacita slotu
+ * kontroluje a zapisuje atomicky — viz PROJECT_AUDIT.md, Riziko #1
+ * (race condition: dva lidé rezervují poslední místo současně).
+ */
+async function reserveInTransaction(input: {
+  name: string;
+  phone: string;
+  email: string;
+  product: "CARTON_12" | "CARTON_30";
+  cartonCount: number;
+  eggCount: number;
+  pickupDate: string;
+  pickupTime: string;
+  note?: string;
+  clientToken: string;
+}) {
+  return prisma.$transaction(
+    async (tx) => {
+      const capacity = await checkSlotCapacity(
+        input.pickupDate,
+        input.pickupTime,
+        input.cartonCount,
+        tx,
+      );
+      if (!capacity.ok) {
+        throw new SlotCapacityError(capacity.reason);
+      }
+      return tx.reservation.create({
+        data: {
+          name: input.name,
+          phone: input.phone,
+          email: input.email,
+          product: input.product,
+          cartonCount: input.cartonCount,
+          eggCount: input.eggCount,
+          pickupDate: input.pickupDate,
+          pickupTime: input.pickupTime,
+          note: input.note || null,
+          clientToken: input.clientToken,
+          consentAt: new Date(),
+        },
+      });
+    },
+    isPostgres ? { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } : undefined,
+  );
+}
+
+function toSummary(reservation: Reservation, productLabel: string, totalPrice: number): ReservationSummary {
+  return {
+    name: reservation.name,
+    productLabel,
+    cartonCount: reservation.cartonCount,
+    eggCount: reservation.eggCount,
+    totalPrice,
+    pickupDate: reservation.pickupDate,
+    pickupTime: reservation.pickupTime,
+  };
+}
 
 export async function createReservation(
   _prevState: ReservationActionState,
@@ -62,6 +131,7 @@ export async function createReservation(
     pickupTime: formData.get("pickupTime")?.toString() ?? "",
     note: formData.get("note")?.toString() ?? "",
     consent: formData.get("consent") === "on",
+    clientToken: formData.get("clientToken")?.toString() ?? "",
   };
 
   const parsed = reservationSchema.safeParse(raw);
@@ -80,46 +150,64 @@ export async function createReservation(
   }
 
   const data = parsed.data;
-
-  const capacity = await checkSlotCapacity(data.pickupDate, data.pickupTime, data.cartonCount);
-  if (!capacity.ok) {
-    return {
-      status: "error",
-      message: capacity.reason,
-      fieldErrors: { pickupTime: capacity.reason },
-    };
-  }
-
   const productId = PRODUCT_TO_ID[data.product];
   const product = getProduct(productId);
   const eggCount = product.eggCount * data.cartonCount;
   const totalPrice = getProductPrice(productId) * data.cartonCount;
 
-  const reservation = await prisma.reservation.create({
-    data: {
-      name: data.name,
-      phone: data.phone,
-      email: data.email,
-      product: data.product,
-      cartonCount: data.cartonCount,
-      eggCount,
-      pickupDate: data.pickupDate,
-      pickupTime: data.pickupTime,
-      note: data.note || null,
-      consentAt: new Date(),
-    },
-  });
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const reservation = await reserveInTransaction({ ...data, eggCount });
+      return { status: "success", summary: toSummary(reservation, product.label, totalPrice) };
+    } catch (err) {
+      if (err instanceof SlotCapacityError) {
+        return {
+          status: "error",
+          message: err.message,
+          fieldErrors: { pickupTime: err.message },
+        };
+      }
+
+      // Stejný clientToken už existuje → tohle je duplicitní odeslání
+      // (dvojklik / zopakovaný request). Vrátíme výsledek té PRVNÍ
+      // rezervace, ne chybu — pro zákazníka to musí vypadat jako jeden
+      // úspěšný požadavek.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const existing = await prisma.reservation.findUnique({
+          where: { clientToken: data.clientToken },
+        });
+        if (existing) {
+          const existingProduct = getProduct(PRODUCT_TO_ID[existing.product]);
+          return {
+            status: "success",
+            summary: toSummary(
+              existing,
+              existingProduct.label,
+              getProductPrice(PRODUCT_TO_ID[existing.product]) * existing.cartonCount,
+            ),
+          };
+        }
+      }
+
+      // Serializační konflikt na Postgres (souběh dvou transakcí na
+      // stejném slotu) — zkusit znovu s malým odstupem.
+      const isSerializationConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+      if (isSerializationConflict && attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 75 * attempt));
+        continue;
+      }
+
+      console.error("Rezervaci se nepodařilo uložit:", err);
+      return {
+        status: "error",
+        message: "Něco se nepovedlo. Zkus to prosím znovu za chvíli.",
+      };
+    }
+  }
 
   return {
-    status: "success",
-    summary: {
-      name: reservation.name,
-      productLabel: product.label,
-      cartonCount: reservation.cartonCount,
-      eggCount: reservation.eggCount,
-      totalPrice,
-      pickupDate: reservation.pickupDate,
-      pickupTime: reservation.pickupTime,
-    },
+    status: "error",
+    message: "Něco se nepovedlo. Zkus to prosím znovu za chvíli.",
   };
 }

@@ -43,6 +43,7 @@ export const reservationSchema = z.object({
   consent: z.literal(true, {
     message: "Pro odeslání rezervace potřebujeme tvůj souhlas se zpracováním údajů.",
   }),
+  clientToken: z.string().min(10).max(100),
 });
 
 export type ReservationInput = z.infer<typeof reservationSchema>;

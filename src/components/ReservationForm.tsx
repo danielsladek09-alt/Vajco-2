@@ -28,6 +28,12 @@ export function ReservationForm({
 }) {
   const [state, formAction, isPending] = useActionState(createReservation, initialState);
 
+  // Vygeneruje se jednou při načtení formuláře a posílá se s requestem —
+  // pokud zákazník klikne na "Rezervovat" dvakrát (nebo prohlížeč request
+  // zopakuje), server podle stejného tokenu pozná duplicitu a nevytvoří
+  // druhou rezervaci (viz PROJECT_AUDIT.md, Riziko #2).
+  const [clientToken] = useState(() => crypto.randomUUID());
+
   const [productId, setProductId] = useState<ProductId>("carton-12");
   const [cartonCount, setCartonCount] = useState(1);
   const [pickupDate, setPickupDate] = useState("");
@@ -98,6 +104,7 @@ export function ReservationForm({
         className="absolute left-[-9999px] h-0 w-0 opacity-0"
         aria-hidden="true"
       />
+      <input type="hidden" name="clientToken" value={clientToken} readOnly />
 
       <fieldset>
         <StepLabel n="01" label="Kolik vajec?" />

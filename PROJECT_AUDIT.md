@@ -212,30 +212,29 @@ prodávajících (sekce E). **PRIORITA: High.**
 | Scénář | Návrh řešení (co web dělá / má dělat) |
 |---|---|
 | Kapacita slotu už není | Server-side kontrola (`checkSlotCapacity`) při odeslání, ne jen na klientu — plný slot je v selectu rovnou zobrazený jako "obsazeno" |
-| Dva lidé odešlou poslední místo současně | **Race condition** — řešeno databázovou transakcí při zápisu (viz sekce Race Conditions níže); aktuální implementace to zatím dělá "read-then-write" bez transakčního zámku — **potřeba dopracovat, viz Riziko #1** |
-| Zákazník odešle rezervaci 2× (dvojklik) | Tlačítko se po odeslání disabluje (`isPending`), formulář po úspěchu zmizí a nahradí se potvrzením — zabraňuje opakovanému odeslání stejného requestu z UI. Bez idempotenčního klíče ale technicky **nejde** vyloučit dva rychlé samostatné requesty (viz Riziko #2) |
+| Dva lidé odešlou poslední místo současně | **Race condition** — ✅ opraveno, kontrola kapacity a zápis rezervace teď běží v jedné DB transakci (`prisma.$transaction`, na Postgres se Serializable izolací + retry), viz Riziko #1 |
+| Zákazník odešle rezervaci 2× (dvojklik) | Tlačítko se po odeslání disabluje (`isPending`) a ✅ formulář navíc posílá klientský idempotenční token (`clientToken`, unikátní v DB) — druhý pokus se stejným tokenem vrátí výsledek té první rezervace, ne chybu ani duplicitu, viz Riziko #2 |
 | Zákazník nepřijede | Bez definovaného pravidla (viz otázka #6) — návrh: administrace umožní ručně označit "Zrušeno"/"Nevyzvednuto", žádná automatika zatím |
 | Zákazník chce změnit čas/počet | Zatím žádné samoobslužné "moje rezervace" — změnu/zrušení řeší admin ručně (telefon/e-mail); je to vědomé zjednodušení pro verzi 1 |
 | Vejce dojdou mimo systém (mimořádně) | Admin může slot i zpětně "uzavřít" snížením kapacity v configu pro budoucí sloty; **pro už vzniklé rezervace na daný slot je potřeba zákazníky kontaktovat ručně** — automatická hromadná notifikace zatím není součástí V1 |
 | Výdejní den se celý zruší | Config (`reservationConfig.pickupDays`) lze změnit ihned; existující rezervace na zrušený den ale zůstanou v DB se starým datem — je potřeba je řešit ručně přes admin |
 | Systém/DB nefunguhe | Formulář zobrazí lidskou chybovou hlášku (ne "500 Internal Server Error"), rezervace se neuloží — zákazník to může zkusit znovu |
 
-**Riziko #1 — race condition při kapacitě** *(Critical)*: Aktuální
-návrh počítá obsazenost slotu dotazem do databáze (`findMany` → součet)
-a teprve pak zapisuje novou rezervaci — mezi těmito dvěma kroky teoreticky
-může vzniknout souběh (dva požadavky projdou kontrolou současně).
-**Doporučení pro Fázi 7**: přesunout kontrolu kapacity do jedné databázové
-transakce (`prisma.$transaction`) se serializovanou úrovní izolace, nebo
-použít DB unikátní omezení/atomický čítač na úrovni slotu. U očekávaného
-provozu VAJCO (desítky, ne tisíce rezervací najednou) je riziko v praxi
-nízké, ale mělo by být opravené před ostrým spuštěním, ne až po
-incidentu.
+**Riziko #1 — race condition při kapacitě** *(Critical)* — ✅ **opraveno**.
+Kontrola kapacity a zápis nové rezervace teď běží v jedné databázové
+transakci (`src/actions/reservation.ts`, `reserveInTransaction`): na
+Postgresu/Supabase se Serializable izolací + automatickým retry (max 3×)
+při serializačním konfliktu, na SQLite bez explicitní izolace (SQLite
+zamyká celý soubor při zápisu, takže se transakce v praxi neprolnou).
+Kapacita se znovu ověřuje uvnitř transakce (`checkSlotCapacity(..., tx)`),
+ne mimo ni.
 
-**Riziko #2 — duplicitní odeslání** *(Medium)*: doporučujeme doplnit
-klientský idempotenční token (náhodné ID vygenerované při načtení
-formuláře, poslané spolu s daty, DB unique index na `(idempotencyKey)`),
-aby ani dva nezávislé requesty z jednoho prohlížeče nevytvořily dvě
-rezervace.
+**Riziko #2 — duplicitní odeslání** *(Medium)* — ✅ **opraveno**. Formulář
+generuje při načtení náhodný `clientToken` (`crypto.randomUUID()`) a
+posílá ho s rezervací; sloupec `clientToken` má v DB unikátní omezení.
+Pokud dorazí druhý request se stejným tokenem (dvojklik, zopakovaný
+request po výpadku sítě...), server vrátí úspěšný výsledek té **první**
+rezervace místo vytvoření duplicity nebo chyby.
 
 ---
 
@@ -315,9 +314,13 @@ bude adresa).
 - Admin chráněný heslem + podepsanou httpOnly cookie, ne veřejně
   přístupný, žádné tajné klíče v klientském kódu.
 - Rate limiting a honeypot proti spamu v rezervačním formuláři.
-- Zbývá doplnit: striktnější rate limiting per-slot (viz Riziko #1),
-  CSRF ochrana je řešená tím, že Next.js server actions ji mají
+- Kapacita slotu se kontroluje i zapisuje atomicky v jedné DB transakci
+  (viz sekce G, Riziko #1) — nejde ji obejít souběžnými požadavky.
+- CSRF ochrana je řešená tím, že Next.js server actions ji mají
   zabudovanou (Origin header check).
+- Zbývá doplnit: rate limiting je zatím in-memory (per instance, ne
+  sdílený) — dostatečné pro očekávaný provoz, ale při škálování na víc
+  serverless instancí by chtělo sdílené úložiště (Redis/Upstash).
 
 ---
 

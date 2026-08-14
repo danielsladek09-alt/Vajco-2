@@ -53,6 +53,12 @@ model Reservation {
 
   note String?
 
+  // Náhodný token vygenerovaný formulářem při načtení stránky. Zabraňuje
+  // duplicitní rezervaci při dvojkliku / dvojitém odeslání requestu —
+  // druhý pokus se stejným tokenem narazí na unikátní omezení a server
+  // vrátí výsledek té první (už vytvořené) rezervace.
+  clientToken String @unique
+
   status ReservationStatus @default(NEW)
 
   consentAt DateTime
